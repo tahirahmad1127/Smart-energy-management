@@ -1,0 +1,2 @@
+C:/fyp updated/android/app/.cxx/Debug/3l2n2545/x86/CMakeFiles/edit_cache.dir
+C:/fyp updated/android/app/.cxx/Debug/3l2n2545/x86/CMakeFiles/rebuild_cache.dir

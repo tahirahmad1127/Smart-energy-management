@@ -1,0 +1,1 @@
+C:\Users\PMLS\AndroidStudioProjects\IOT-based-smart-energy-management-and-automation\build\app\intermediates\cxx\Debug\6714i4k6\obj\arm64-v8a

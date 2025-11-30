@@ -1,0 +1,2 @@
+C:/Users/PMLS/AndroidStudioProjects/IOT-based-smart-energy-management-and-automation/android/app/.cxx/Debug/6714i4k6/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/PMLS/AndroidStudioProjects/IOT-based-smart-energy-management-and-automation/android/app/.cxx/Debug/6714i4k6/arm64-v8a/CMakeFiles/rebuild_cache.dir
