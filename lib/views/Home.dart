@@ -18,6 +18,7 @@ import 'package:news_app/views/settings_screen.dart';
 import 'analytics.dart';
 import 'bill_screen.dart';
 import 'devices.dart';
+import 'prepaid_billing_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -349,8 +350,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final List<Widget> _pages = [
       _buildDashboardView(),          // Index 0: Your original Home Dashboard
       const DevicesScreen(),          // Index 1: The Device Manager (Make sure class name matches)
-      const EnergyStatisticsScreen(), // Index 2: Placeholder
-      const BillScreen(),  // Index 3: Placeholder
+      const EnergyStatisticsScreen(), // Index 2: Usage Screen
+      const BillScreen(),             // Index 3: Bill Screen
+      const PrepaidBillingScreen(),   // Index 4: Prepaid Billing Screen
     ];
 
     final gradientColors = isDark
@@ -434,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             BottomNavigationBarItem(icon: Icon(Icons.devices), label: 'Devices'),
             BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Usage'),
             BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Bill'),
-            BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
+            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Prepaid'),
           ],
         ),
       ),

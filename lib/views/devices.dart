@@ -355,10 +355,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Edit Device Name"),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: "Enter new name", border: OutlineInputBorder()),
+        content: SingleChildScrollView(
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: "Enter new name", border: OutlineInputBorder()),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
@@ -433,45 +435,47 @@ class _DevicesScreenState extends State<DevicesScreen> {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Text("Schedule for $title", style: const TextStyle(fontSize: 18)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SwitchListTile(
-                    title: Text(active ? "Enabled" : "Disabled", style: TextStyle(fontWeight: FontWeight.bold, color: active ? Colors.green : Colors.grey)),
-                    value: active,
-                    activeColor: Colors.green,
-                    onChanged: (val) => setState(() => active = val),
-                  ),
-                  const SizedBox(height: 20),
-
-                  ListTile(
-                    leading: const Icon(Icons.wb_sunny_outlined, color: Colors.orange),
-                    title: const Text("Turn ON"),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-                      child: Text(initialStart.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SwitchListTile(
+                      title: Text(active ? "Enabled" : "Disabled", style: TextStyle(fontWeight: FontWeight.bold, color: active ? Colors.green : Colors.grey)),
+                      value: active,
+                      activeColor: Colors.green,
+                      onChanged: (val) => setState(() => active = val),
                     ),
-                    onTap: () async {
-                      final t = await showTimePicker(context: context, initialTime: initialStart);
-                      if (t != null) setState(() => initialStart = t);
-                    },
-                  ),
+                    const SizedBox(height: 20),
 
-                  ListTile(
-                    leading: const Icon(Icons.nights_stay_outlined, color: Colors.teal),
-                    title: const Text("Turn OFF"),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-                      child: Text(initialStop.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    ListTile(
+                      leading: const Icon(Icons.wb_sunny_outlined, color: Colors.orange),
+                      title: const Text("Turn ON"),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
+                        child: Text(initialStart.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                      ),
+                      onTap: () async {
+                        final t = await showTimePicker(context: context, initialTime: initialStart);
+                        if (t != null) setState(() => initialStart = t);
+                      },
                     ),
-                    onTap: () async {
-                      final t = await showTimePicker(context: context, initialTime: initialStop);
-                      if (t != null) setState(() => initialStop = t);
-                    },
-                  ),
-                ],
+
+                    ListTile(
+                      leading: const Icon(Icons.nights_stay_outlined, color: Colors.teal),
+                      title: const Text("Turn OFF"),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
+                        child: Text(initialStop.format(context), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                      ),
+                      onTap: () async {
+                        final t = await showTimePicker(context: context, initialTime: initialStop);
+                        if (t != null) setState(() => initialStop = t);
+                      },
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),

@@ -81,6 +81,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,

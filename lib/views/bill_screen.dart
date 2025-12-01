@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:news_app/theme/energy_theme.dart';
+import 'package:news_app/services/bill_calculator.dart';
 
 class BillScreen extends StatefulWidget {
   const BillScreen({Key? key}) : super(key: key);
@@ -18,6 +20,93 @@ class _BillScreenState extends State<BillScreen> {
   ).ref('energyMonitor');
   String _selectedPeriod = 'Current Month';
   final List<String> _periods = ['Current Month', 'Last Month', 'Last 3 Months', 'All Time'];
+  
+  // Note: Using IESCO tariff calculator for consistent bill calculation
+  
+  // Monthly tracking keys
+  static const String _lastMonthEnergyKey = 'lastMonthEnergyKWh';
+  static const String _lastMonthStartKey = 'lastMonthStartTimestamp';
+  static const String _currentMonthStartKey = 'currentMonthStartTimestamp';
+  static const String _energyAtMonthStartKey = 'energyAtMonthStart';
+  
+  // Cached values
+  double _lastMonthEnergy = 0.0;
+  double _energyAtMonthStart = 0.0;
+  int _currentMonth = DateTime.now().month;
+  int _currentYear = DateTime.now().year;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMonthlyTracking();
+  }
+
+  Future<void> _loadMonthlyTracking() async {
+    final prefs = await SharedPreferences.getInstance();
+    _lastMonthEnergy = prefs.getDouble(_lastMonthEnergyKey) ?? 0.0;
+    _energyAtMonthStart = prefs.getDouble(_energyAtMonthStartKey) ?? 0.0;
+    
+    // Check if we're in a new month
+    DateTime now = DateTime.now();
+    int lastStoredMonth = prefs.getInt(_currentMonthStartKey) ?? now.month;
+    int lastStoredYear = prefs.getInt(_lastMonthStartKey) ?? now.year;
+    
+    if (now.month != lastStoredMonth || now.year != lastStoredYear) {
+      // New month detected - update tracking
+      _lastMonthEnergy = _energyAtMonthStart > 0 
+          ? (prefs.getDouble('previousTotalEnergy') ?? 0.0) - _energyAtMonthStart
+          : 0.0;
+      
+      await prefs.setDouble(_lastMonthEnergyKey, _lastMonthEnergy);
+      await prefs.setDouble('previousTotalEnergy', _energyAtMonthStart);
+      await prefs.setInt(_currentMonthStartKey, now.month);
+      await prefs.setInt(_lastMonthStartKey, now.year);
+      
+      setState(() {
+        _currentMonth = now.month;
+        _currentYear = now.year;
+      });
+    }
+  }
+
+  Future<void> _updateMonthlyTracking(double currentTotalEnergy) async {
+    final prefs = await SharedPreferences.getInstance();
+    DateTime now = DateTime.now();
+    int storedMonth = prefs.getInt(_currentMonthStartKey) ?? now.month;
+    int storedYear = prefs.getInt(_lastMonthStartKey) ?? now.year;
+    
+    // If new month, save previous month's data
+    if (now.month != storedMonth || now.year != storedYear) {
+      double previousEnergyAtStart = prefs.getDouble(_energyAtMonthStartKey) ?? 0.0;
+      if (previousEnergyAtStart > 0) {
+        double lastMonthConsumption = currentTotalEnergy - previousEnergyAtStart;
+        await prefs.setDouble(_lastMonthEnergyKey, lastMonthConsumption);
+      }
+      
+      // Update for new month
+      await prefs.setDouble(_energyAtMonthStartKey, currentTotalEnergy);
+      await prefs.setInt(_currentMonthStartKey, now.month);
+      await prefs.setInt(_lastMonthStartKey, now.year);
+      
+      setState(() {
+        _energyAtMonthStart = currentTotalEnergy;
+        _currentMonth = now.month;
+        _currentYear = now.year;
+        if (previousEnergyAtStart > 0) {
+          _lastMonthEnergy = currentTotalEnergy - previousEnergyAtStart;
+        }
+      });
+    } else {
+      // Same month - just ensure energy at start is stored
+      double storedEnergyAtStart = prefs.getDouble(_energyAtMonthStartKey) ?? 0.0;
+      if (storedEnergyAtStart == 0) {
+        await prefs.setDouble(_energyAtMonthStartKey, currentTotalEnergy);
+        setState(() {
+          _energyAtMonthStart = currentTotalEnergy;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,18 +133,31 @@ class _BillScreenState extends State<BillScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(
-            "Energy Bill",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black,
-              fontSize: 20,
+          title: GestureDetector(
+            onLongPress: () => _showTestDataDialog(context, isDark, cardColor, textColor),
+            child: Text(
+              "Energy Bill",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 20,
+              ),
             ),
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
+          actions: [
+            IconButton(
+              icon: Icon(
+                Icons.settings_outlined,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+              tooltip: 'Set Test Data',
+              onPressed: () => _showTestDataDialog(context, isDark, cardColor, textColor),
+            ),
+          ],
         ),
         body: StreamBuilder<DatabaseEvent>(
           stream: _database.onValue,
@@ -88,37 +190,61 @@ class _BillScreenState extends State<BillScreen> {
           double totalEnergy = double.tryParse(data["totalEnergyKWh"]?.toString() ?? "0") ?? 0.0;
           double currentBill = double.tryParse(data["bill"]?.toString() ?? "0") ?? 0.0;
           double currentPower = double.tryParse(data["power"]?.toString() ?? "0") ?? 0.0;
-          double unitPrice = 30.0; // Unit price from ESP32 code (PKR/kWh)
 
-          // Calculate predicted bill from 1st of current month to 1st of next month
+          // Update monthly tracking (async - will update state on next rebuild)
+          _updateMonthlyTracking(totalEnergy);
+          
+          // Calculate current month's consumption so far
           DateTime now = DateTime.now();
           DateTime firstOfCurrentMonth = DateTime(now.year, now.month, 1);
           DateTime firstOfNextMonth = now.month == 12
               ? DateTime(now.year + 1, 1, 1)
               : DateTime(now.year, now.month + 1, 1);
 
-          // Calculate days elapsed in current month (from 1st to today, inclusive)
           int daysElapsed = now.difference(firstOfCurrentMonth).inDays + 1;
           int daysInMonth = firstOfNextMonth.difference(firstOfCurrentMonth).inDays;
           int daysRemaining = daysInMonth - daysElapsed;
 
-          // Calculate average daily consumption based on current power
-          // Assuming current power is maintained, calculate energy per hour
-          double hourlyEnergy = currentPower / 1000.0; // kW
-          double dailyEnergy = hourlyEnergy * 24.0; // kWh per day at current rate
-
-          // Calculate energy consumed so far this month (estimated)
-          // If we have lifetime total, we can't know exactly, so we estimate based on current rate
-          double estimatedEnergySoFar = dailyEnergy * daysElapsed;
-
-          // Predict energy for remaining days of the month
-          double predictedEnergyRemaining = dailyEnergy * daysRemaining;
-
-          // Total predicted energy for the month (1st to 1st)
-          double predictedMonthlyEnergy = estimatedEnergySoFar + predictedEnergyRemaining;
-
-          // Predicted bill for the month
-          double predictedMonthlyBill = predictedMonthlyEnergy * unitPrice;
+          // Calculate current month's consumption so far
+          // Use current values from state (may be 0 on first load, will update on next rebuild)
+          double currentMonthEnergySoFar = _energyAtMonthStart > 0 
+              ? (totalEnergy - _energyAtMonthStart).clamp(0.0, double.infinity)
+              : 0.0;
+          
+          // Calculate average daily consumption from last month
+          double lastMonthDailyAverage = _lastMonthEnergy > 0 
+              ? _lastMonthEnergy / 30.0  // Approximate 30 days per month
+              : 0.0;
+          
+          // If we have current month data, use it; otherwise use last month's average or current power
+          double dailyAverage = 0.0;
+          if (currentMonthEnergySoFar > 0 && daysElapsed > 0) {
+            dailyAverage = currentMonthEnergySoFar / daysElapsed;
+          } else if (lastMonthDailyAverage > 0) {
+            dailyAverage = lastMonthDailyAverage;
+          } else {
+            // Fallback: If no historical data, use current power estimate
+            // This allows the app to work even on first use
+            dailyAverage = (currentPower / 1000.0) * 24.0;
+            if (dailyAverage == 0) {
+              // If power is also 0, use a reasonable default (e.g., 10 kWh/day average household)
+              dailyAverage = 10.0;
+            }
+          }
+          
+          // Predict remaining energy for the month
+          double predictedEnergyRemaining = dailyAverage * daysRemaining;
+          
+          // Total predicted energy for the month
+          double predictedMonthlyEnergy = currentMonthEnergySoFar + predictedEnergyRemaining;
+          
+          // Predicted bill for the month using IESCO tariff structure
+          double predictedMonthlyBill = BillCalculator.calculateIESCOBill(predictedMonthlyEnergy);
+          
+          // Calculate effective rate for display
+          double effectiveRate = predictedMonthlyEnergy > 0 
+              ? predictedMonthlyBill / predictedMonthlyEnergy 
+              : 0.0;
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -154,7 +280,7 @@ class _BillScreenState extends State<BillScreen> {
                   // Bill Breakdown
                   _buildBillBreakdownCard(
                     isDark,
-                    unitPrice,
+                    effectiveRate,
                     predictedMonthlyEnergy,
                     predictedMonthlyBill,
                     textColor,
@@ -173,10 +299,11 @@ class _BillScreenState extends State<BillScreen> {
                     predictedMonthlyEnergy,
                     daysElapsed,
                     daysRemaining,
-                    estimatedEnergySoFar,
+                    currentMonthEnergySoFar,
                     predictedEnergyRemaining,
-                    unitPrice,
+                    effectiveRate,
                     firstOfNextMonth,
+                    _lastMonthEnergy,
                   ),
                 ],
               ),
@@ -614,6 +741,7 @@ class _BillScreenState extends State<BillScreen> {
       double predictedEnergyRemaining,
       double unitPrice,
       DateTime firstOfNextMonth,
+      double lastMonthEnergy,
       ) {
     final monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'];
@@ -709,6 +837,47 @@ class _BillScreenState extends State<BillScreen> {
           const SizedBox(height: 24),
           Divider(color: isDark ? Colors.grey.shade800 : Colors.grey.shade300),
           const SizedBox(height: 16),
+          // Show last month's data
+          if (lastMonthEnergy > 0)
+            _buildPredictionRow(
+              'Last Month\'s Consumption',
+              '${lastMonthEnergy.toStringAsFixed(2)} kWh',
+              'Based on actual usage',
+              textColor,
+              subTextColor,
+            ),
+          if (lastMonthEnergy > 0) const SizedBox(height: 12),
+          // Show message if no historical data
+          if (lastMonthEnergy == 0)
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: EnergyTheme.primaryCyan.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: EnergyTheme.primaryCyan.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: EnergyTheme.primaryCyan, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No historical data yet. Prediction based on current usage. Tap the settings icon (⚙️) in the top right to set test data.',
+                      style: GoogleFonts.poppins(
+                        color: subTextColor,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (lastMonthEnergy == 0) const SizedBox(height: 12),
           _buildPredictionRow(
             'Energy Consumed (Est.)',
             '${estimatedEnergySoFar.toStringAsFixed(2)} kWh',
@@ -809,4 +978,163 @@ class _BillScreenState extends State<BillScreen> {
     ],
     );
     }
+
+  // Test Data Dialog - For testing bill predictions without waiting a month
+  void _showTestDataDialog(BuildContext context, bool isDark, Color cardColor, Color textColor) {
+    TextEditingController lastMonthController = TextEditingController(
+      text: _lastMonthEnergy > 0 ? _lastMonthEnergy.toStringAsFixed(2) : ''
+    );
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: cardColor,
+          title: Text(
+            'Set Test Data',
+            style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Enter last month\'s consumption (kWh) for testing:',
+                  style: TextStyle(color: textColor, fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lastMonthController,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  style: TextStyle(color: textColor),
+                  onChanged: (value) {
+                    setDialogState(() {}); // Trigger rebuild to show estimated bill
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Last Month Energy (kWh)',
+                    labelStyle: TextStyle(color: textColor.withOpacity(0.7)),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: EnergyTheme.primaryCyan),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: EnergyTheme.primaryCyan, width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    double? testValue = double.tryParse(lastMonthController.text);
+                    double estimatedBill = 0.0;
+                    if (testValue != null && testValue > 0) {
+                      estimatedBill = BillCalculator.calculateIESCOBill(testValue);
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (testValue != null && testValue > 0)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: EnergyTheme.primaryCyan.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, color: EnergyTheme.primaryCyan, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Estimated bill: PKR ${estimatedBill.toStringAsFixed(2)} (using IESCO tariff)',
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (testValue != null && testValue > 0) const SizedBox(height: 8),
+                        Text(
+                          'Note: This will simulate last month\'s data for bill prediction testing.',
+                          style: TextStyle(
+                            color: textColor.withOpacity(0.6),
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: textColor)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                double? testValue = double.tryParse(lastMonthController.text);
+                if (testValue != null && testValue >= 0) {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setDouble(_lastMonthEnergyKey, testValue);
+                  setState(() {
+                    _lastMonthEnergy = testValue;
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Test data set: ${testValue.toStringAsFixed(2)} kWh'),
+                      backgroundColor: EnergyTheme.primaryCyan,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid number'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: EnergyTheme.primaryCyan,
+              ),
+              child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove(_lastMonthEnergyKey);
+                await prefs.remove(_energyAtMonthStartKey);
+                await prefs.remove(_currentMonthStartKey);
+                await prefs.remove(_lastMonthStartKey);
+                setState(() {
+                  _lastMonthEnergy = 0.0;
+                  _energyAtMonthStart = 0.0;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Test data cleared'),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: Text('Clear All', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

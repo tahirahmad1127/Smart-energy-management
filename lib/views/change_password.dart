@@ -101,6 +101,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(
             "Security",

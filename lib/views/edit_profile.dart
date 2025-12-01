@@ -68,6 +68,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(
             "Edit Profile",
