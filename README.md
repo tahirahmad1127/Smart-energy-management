@@ -1,16 +1,22 @@
-# news_app
+# Voltify — IoT Electricity Monitoring Platform
 
-A new Flutter project.
+Final Year Project: a Flutter app paired with IoT hardware for real-time electricity monitoring across residential and commercial sites, with alerts to reduce waste and remote home automation.
 
-## Getting Started
+## Key features
 
-This project is a starting point for a Flutter application.
+- Real-time power consumption monitoring from IoT sensors
+- Usage alerts and thresholds to reduce electricity waste
+- Remote control of home electricals from the mobile app
+- Historical usage graphs and reports
+- Firebase real-time sync between hardware and app
 
-A few resources to get you started if this is your first Flutter project:
+## Tech stack
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Flutter · Dart · Firebase · IoT hardware · C++ (firmware) · Python (backend)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Getting started
+
+```bash
+flutter pub get
+flutter run
+```
